@@ -36,28 +36,46 @@ class Search(collections.Sequence):
     The only required argument is the index name to search (eg. node, role, etc).
     The second, optional argument can be any Solr search query, with the same semantics
     as Chef.
+    The third optional parameter can be a dictionary containing the parameters for a filtered
+    search (partial search); see https://docs.chef.io/api_chef_server.html#id76
     
     Example::
     
         for row in Search('node', 'roles:app'):
             print row['roles']
             print row.object.name
+
+        # or
+
+        filters = {
+            'name': ['name'],
+            'ip': ['ipaddress'],
+            'kernel_version': ['kernel', 'version'],
+        }
+
+        for row in Search('node', 'roles:app', filters):
+            print row['data']['name']
+            print row['data']['kernel_version']
     
     .. versionadded:: 0.1
     """
 
     url = '/search'
 
-    def __init__(self, index, q='*:*', rows=1000, start=0, api=None):
+    def __init__(self, index, q='*:*', rows=1000, start=0, api=None, filter_result=None):
         self.name = index
         self.api = api or ChefAPI.get_global()
         self._args = dict(q=q, rows=rows, start=start)
+        self.filter_result = filter_result
         self.url = self.__class__.url + '/' + self.name + '?' + six.moves.urllib.parse.urlencode(self._args)
 
     @property
     def data(self):
         if not hasattr(self, '_data'):
-            self._data = self.api[self.url]
+            if self.filter_result is None:
+                self._data = self.api.api_request('GET', self.url)
+            else:
+                self._data = self.api.api_request('POST', self.url, data=self.filter_result)
         return self._data
 
     @property
